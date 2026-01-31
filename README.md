@@ -9,6 +9,7 @@ A Python application to log PID (Parameter ID) data from a car's OBD-II port usi
   - Load PIDs from a text file
   - Interactive selection from available/standard PIDs
   - Toggle PIDs on/off easily
+  - Support for custom manufacturer-specific PIDs
 - 📊 **Real-time Logging**: Log data to CSV files with customizable intervals
 - 💾 **CSV Export**: Timestamped data files for easy analysis
 - 🖥️ **User-friendly CLI**: Simple menu-driven interface
@@ -115,6 +116,48 @@ Here are some commonly used PIDs:
 - `FUEL_LEVEL` - Fuel level
 - `BAROMETRIC_PRESSURE` - Barometric pressure
 
+### Custom (Manufacturer-Specific) PIDs
+
+In addition to standard OBD-II PIDs, the application supports custom manufacturer-specific PIDs through the `custom_pids.txt` configuration file.
+
+**Loading Custom PIDs**:
+1. Select option 3 (Select PIDs) from main menu
+2. Select option 6 (Load custom PIDs)
+3. Enter filename or press Enter for default (`custom_pids.txt`)
+
+**Included Custom PIDs** (in `custom_pids.txt`):
+- `DPF_TEMPERATURE` - Diesel Particulate Filter temperature (°C)
+- `DPF_CLOGGING_LEVEL` - DPF clogging level (%)
+- `DPF_PRESSURE` - DPF pressure (kPa)
+- `OIL_TEMPERATURE` - Engine oil temperature (°C)
+- `EGR_POSITION` - EGR valve position (%)
+- `BOOST_PRESSURE` - Turbo boost pressure (kPa)
+- `FUEL_PRESSURE` - Fuel rail pressure (kPa)
+- `ENGINE_OIL_LIGHT` - Engine oil light status
+
+**Creating Your Own Custom PIDs**:
+
+Edit `custom_pids.txt` using this format:
+```
+NAME|PID_CODE|EQUATION|DESCRIPTION
+```
+
+Examples:
+```
+DPF_TEMPERATURE|221167|(A*256+B)/10-273.15|DPF Temperature (°C)
+OIL_TEMPERATURE|221310|A-40|Oil Temperature (°C)
+```
+
+Where:
+- `NAME`: Identifier (use underscores, no spaces)
+- `PID_CODE`: Hexadecimal PID command
+- `EQUATION`: Decoding formula (A = byte 1, B = byte 2)
+- `DESCRIPTION`: Human-readable description
+
+Common equation patterns:
+- Single byte: `A`, `A-40`, `A/2.55`
+- Two bytes: `(A*256+B)/10`, `(A*256+B)/100`, `(A*256+B)/10-273.15`
+
 **Note**: Not all PIDs are supported by all vehicles. Use the interactive selection after connecting to see which PIDs your vehicle supports.
 
 ## Troubleshooting
@@ -168,6 +211,7 @@ LectorOBD/
 ├── obd_logger.py        # Core OBD logging functionality
 ├── requirements.txt     # Python dependencies
 ├── pids_example.txt     # Example PID configuration file
+├── custom_pids.txt      # Custom manufacturer-specific PIDs
 ├── README.md           # This file
 └── obd_log_*.csv       # Generated log files (created during logging)
 ```

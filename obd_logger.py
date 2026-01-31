@@ -6,6 +6,8 @@ PID data collection, and CSV logging functionality.
 """
 
 import obd
+from obd import OBDCommand, Unit
+from obd.protocols import ECU
 import csv
 import time
 from datetime import datetime
@@ -20,6 +22,7 @@ class OBDLogger:
         """Initialize the OBD logger."""
         self.connection: Optional[obd.OBD] = None
         self.selected_pids: List[obd.OBDCommand] = []
+        self.custom_commands: Dict[str, obd.OBDCommand] = {}  # Store custom PIDs
         self.is_logging: bool = False
         self.log_file: Optional[str] = None
         self.csv_writer: Optional[csv.DictWriter] = None
@@ -108,7 +111,149 @@ class OBDLogger:
         for cmd in obd.commands[1]:  # Mode 1 commands (current data)
             if cmd.name not in ['ELM_VERSION', 'ELM_VOLTAGE', 'STATUS', 'FREEZE_DTC']:
                 all_commands.append(cmd)
+        
+        # Add custom commands
+        all_commands.extend(self.custom_commands.values())
+        
         return sorted(all_commands, key=lambda x: x.name)
+    
+    def _create_custom_decoder(self, equation: str, num_bytes: int):
+        """
+        Create a decoder function from an equation string.
+        
+        Args:
+            equation: Equation string (e.g., "(A*256+B)/10-273.15")
+            num_bytes: Number of bytes expected in response
+            
+        Returns:
+            Decoder function compatible with python-OBD
+        """
+        def decoder(messages):
+            """Decode the OBD response using the custom equation."""
+            if not messages:
+                return None
+            
+            # Get the data bytes from the message
+            data = messages[0].data
+            
+            # Skip the first 2 bytes (mode and PID echo)
+            if len(data) < 2 + num_bytes:
+                return None
+            
+            # Extract byte values
+            if num_bytes >= 1:
+                A = data[2]
+            if num_bytes >= 2:
+                B = data[3] if len(data) > 3 else 0
+            
+            try:
+                # Evaluate the equation
+                result = eval(equation)
+                return result
+            except Exception as e:
+                print(f"Error evaluating equation '{equation}': {e}")
+                return None
+        
+        return decoder
+    
+    def register_custom_pid(self, name: str, pid_code: str, equation: str, description: str) -> bool:
+        """
+        Register a custom PID with specific decoding equation.
+        
+        Args:
+            name: PID name (e.g., "DPF_TEMPERATURE")
+            pid_code: Hexadecimal PID code (e.g., "221167")
+            equation: Decoding equation (e.g., "(A*256+B)/10-273.15")
+            description: Human-readable description
+            
+        Returns:
+            True if registration successful, False otherwise.
+        """
+        try:
+            # Determine number of bytes needed based on equation
+            num_bytes = 2 if 'B' in equation else 1
+            
+            # Create the custom command
+            custom_cmd = OBDCommand(
+                name=name,
+                desc=description,
+                command=bytes.fromhex(pid_code),
+                _bytes=num_bytes,
+                decoder=self._create_custom_decoder(equation, num_bytes),
+                ecu=ECU.ALL,
+                fast=False
+            )
+            
+            # Store the custom command
+            self.custom_commands[name] = custom_cmd
+            
+            # Register it with the OBD library if connected
+            if self.connection:
+                self.connection.supported_commands.add(custom_cmd)
+            
+            print(f"[OK] Registered custom PID: {name}")
+            return True
+            
+        except Exception as e:
+            print(f"[ERROR] Error registering custom PID '{name}': {e}")
+            return False
+    
+    def load_custom_pids_from_file(self, filename: str = "custom_pids.txt") -> bool:
+        """
+        Load custom PIDs from a configuration file.
+        
+        File format (pipe-delimited):
+        NAME|PID_CODE|EQUATION|DESCRIPTION
+        
+        Args:
+            filename: Path to custom PIDs configuration file
+            
+        Returns:
+            True if PIDs loaded successfully, False otherwise.
+        """
+        if not os.path.exists(filename):
+            print(f"[INFO] Custom PIDs file not found: {filename}")
+            return False
+        
+        try:
+            loaded_count = 0
+            failed_pids = []
+            
+            with open(filename, 'r') as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    
+                    # Skip comments and empty lines
+                    if not line or line.startswith('#'):
+                        continue
+                    
+                    # Parse the line
+                    parts = line.split('|')
+                    if len(parts) != 4:
+                        print(f"[WARN] Line {line_num}: Invalid format (expected 4 fields)")
+                        failed_pids.append(f"Line {line_num}")
+                        continue
+                    
+                    name, pid_code, equation, description = [p.strip() for p in parts]
+                    
+                    # Register the custom PID
+                    if self.register_custom_pid(name, pid_code, equation, description):
+                        loaded_count += 1
+                    else:
+                        failed_pids.append(name)
+            
+            if loaded_count > 0:
+                print(f"[OK] Loaded {loaded_count} custom PID(s) from {filename}")
+                if failed_pids:
+                    print(f"  Warning: {len(failed_pids)} PID(s) failed to load")
+                return True
+            else:
+                print(f"[ERROR] No valid custom PIDs loaded from {filename}")
+                return False
+                
+        except Exception as e:
+            print(f"[ERROR] Error loading custom PIDs from file: {e}")
+            return False
     
     def load_pids_from_file(self, filename: str) -> bool:
         """
@@ -137,10 +282,10 @@ class OBDLogger:
             
             for pid_name in pid_names:
                 # Try to find the command
-                cmd = obd.commands.has_name(pid_name)
-                if cmd:
+                try:
+                    cmd = obd.commands[pid_name]
                     self.selected_pids.append(cmd)
-                else:
+                except KeyError:
                     failed_pids.append(pid_name)
             
             if self.selected_pids:
@@ -166,16 +311,21 @@ class OBDLogger:
         Returns:
             True if PID added successfully, False otherwise.
         """
-        cmd = obd.commands.has_name(pid_name)
-        if cmd:
-            if cmd not in self.selected_pids:
-                self.selected_pids.append(cmd)
-                return True
-            else:
-                print(f"PID {pid_name} already selected")
+        # Try standard commands first
+        try:
+            cmd = obd.commands[pid_name]
+        except KeyError:
+            # Try custom commands
+            cmd = self.custom_commands.get(pid_name)
+            if not cmd:
+                print(f"PID {pid_name} not found")
                 return False
+        
+        if cmd not in self.selected_pids:
+            self.selected_pids.append(cmd)
+            return True
         else:
-            print(f"PID {pid_name} not found")
+            print(f"PID {pid_name} already selected")
             return False
     
     def remove_pid(self, pid_name: str) -> bool:

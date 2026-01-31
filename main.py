@@ -99,7 +99,8 @@ def pid_selection_menu(logger: OBDLogger):
         print("3. Clear selected PIDs")
         print("4. List all available PIDs and save to file")
         print("5. Save selected PIDs to file")
-        print("6. Back to main menu")
+        print("6. Load custom PIDs (manufacturer-specific)")
+        print("7. Back to main menu")
         print("-" * 60)
         
         current = logger.get_selected_pids()
@@ -133,6 +134,9 @@ def pid_selection_menu(logger: OBDLogger):
             save_selected_pids(logger)
         
         elif choice == '6':
+            load_custom_pids_menu(logger)
+        
+        elif choice == '7':
             break
 
 
@@ -259,6 +263,23 @@ def save_selected_pids(logger: OBDLogger):
     
     # Save selected PIDs to file
     logger.save_selected_pids_to_file(filename)
+    input("\nPress Enter to continue...")
+
+
+def load_custom_pids_menu(logger: OBDLogger):
+    """Load custom (manufacturer-specific) PIDs."""
+    print("\n" + "-" * 60)
+    print("LOAD CUSTOM PIDs")
+    print("-" * 60)
+    print("\nCustom PIDs are manufacturer-specific PIDs not included in")
+    print("the standard OBD-II specification (e.g., DPF temp, boost pressure)")
+    
+    default_filename = "custom_pids.txt"
+    filename = input(f"\nEnter filename (default: {default_filename}): ").strip()
+    if not filename:
+        filename = default_filename
+    
+    logger.load_custom_pids_from_file(filename)
     input("\nPress Enter to continue...")
 
 
