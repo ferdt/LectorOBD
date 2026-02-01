@@ -40,7 +40,7 @@ env/
 Thumbs.db
 
 # OBD Logger specific
-obd_log_*.csv
+Logs/
 available_pids.txt
 selected_pids.txt
 my_*.txt

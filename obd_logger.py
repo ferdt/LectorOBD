@@ -455,9 +455,14 @@ class OBDLogger:
             print("✗ Cannot start logging: No PIDs selected")
             return False
         
+        # Create Logs directory if it doesn't exist
+        logs_dir = "Logs"
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+        
         # Generate log filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.log_file = f"obd_log_{timestamp}.csv"
+        self.log_file = os.path.join(logs_dir, f"obd_log_{timestamp}.csv")
         
         try:
             # Open CSV file for writing

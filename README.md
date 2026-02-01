@@ -77,8 +77,8 @@ python main.py
    - Press Ctrl+C to stop logging
 
 4. **Find Your Data**:
-   - CSV files are saved as `obd_log_YYYYMMDD_HHMMSS.csv`
-   - Located in the same directory as the application
+   - CSV files are saved as `Logs/obd_log_YYYYMMDD_HHMMSS.csv`
+   - Located in the `Logs` subdirectory
 
 ### Creating a PID List File
 
@@ -213,7 +213,8 @@ LectorOBD/
 ├── pids_example.txt     # Example PID configuration file
 ├── custom_pids.txt      # Custom manufacturer-specific PIDs
 ├── README.md           # This file
-└── obd_log_*.csv       # Generated log files (created during logging)
+└── Logs/               # Generated log files directory
+    └── obd_log_*.csv   # Timestamped CSV log files
 ```
 
 ## CSV Output Format
