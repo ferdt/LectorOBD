@@ -118,14 +118,14 @@ Here are some commonly used PIDs:
 
 ### Custom (Manufacturer-Specific) PIDs
 
-In addition to standard OBD-II PIDs, the application supports custom manufacturer-specific PIDs through the `custom_pids.txt` configuration file.
+In addition to standard OBD-II PIDs, the application supports custom manufacturer-specific PIDs through the `PID_database/custom_pids.txt` configuration file.
 
 **Loading Custom PIDs**:
 1. Select option 3 (Select PIDs) from main menu
 2. Select option 6 (Load custom PIDs)
-3. Enter filename or press Enter for default (`custom_pids.txt`)
+3. Enter filename or press Enter for default (`PID_database/custom_pids.txt`)
 
-**Included Custom PIDs** (in `custom_pids.txt`):
+**Included Custom PIDs** (in `PID_database/custom_pids.txt`):
 - `DPF_TEMPERATURE` - Diesel Particulate Filter temperature (°C)
 - `DPF_CLOGGING_LEVEL` - DPF clogging level (%)
 - `DPF_PRESSURE` - DPF pressure (kPa)
@@ -137,7 +137,7 @@ In addition to standard OBD-II PIDs, the application supports custom manufacture
 
 **Creating Your Own Custom PIDs**:
 
-Edit `custom_pids.txt` using this format:
+Edit `PID_database/custom_pids.txt` using this format:
 ```
 NAME|PID_CODE|EQUATION|DESCRIPTION
 ```
@@ -211,7 +211,8 @@ LectorOBD/
 ├── obd_logger.py        # Core OBD logging functionality
 ├── requirements.txt     # Python dependencies
 ├── pids_example.txt     # Example PID configuration file
-├── custom_pids.txt      # Custom manufacturer-specific PIDs
+├── PID_database/        # PID configuration folder
+│   └── custom_pids.txt  # Custom manufacturer-specific PIDs
 ├── README.md           # This file
 └── Logs/               # Generated log files directory
     └── obd_log_*.csv   # Timestamped CSV log files
