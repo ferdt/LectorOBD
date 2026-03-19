@@ -66,12 +66,31 @@ def connect_menu(logger: OBDLogger):
             input("\nPress Enter to continue...")
     
     elif choice == '2':
-        print("\nAvailable COM ports are typically COM1-COM20 on Windows")
-        print("Check Windows Device Manager > Ports (COM & LPT) for your ELM327 port")
-        port = input("\nEnter COM port (e.g., COM3): ").strip().upper()
+        print("\nScanning for available COM ports...")
+        available_ports = logger.get_available_ports()
         
-        if not port.startswith("COM"):
-            print("Invalid port format. Should be like COM3, COM4, etc.")
+        print("\nAvailable Ports:")
+        if available_ports:
+            for i, p in enumerate(available_ports, 1):
+                print(f"{i}. {p['device']} - {p['description']}")
+            print("0. Enter port manually")
+        else:
+            print("No COM ports detected.")
+            print("0. Enter port manually")
+            
+        port_choice = input("\nSelect port number or 0 to enter manually: ").strip()
+        port = ""
+        
+        if port_choice.isdigit() and int(port_choice) > 0 and int(port_choice) <= len(available_ports):
+            port = available_ports[int(port_choice)-1]['device']
+        elif port_choice == '0' or not port_choice:
+            port = input("\nEnter COM port (e.g., COM3): ").strip().upper()
+            if not port.startswith("COM"):
+                print("Invalid port format. Should be like COM3, COM4, etc.")
+                input("Press Enter to continue...")
+                return
+        else:
+            print("Invalid selection.")
             input("Press Enter to continue...")
             return
         
@@ -274,7 +293,7 @@ def load_custom_pids_menu(logger: OBDLogger):
     print("\nCustom PIDs are manufacturer-specific PIDs not included in")
     print("the standard OBD-II specification (e.g., DPF temp, boost pressure)")
     
-    default_filename = "custom_pids.txt"
+    default_filename = os.path.join("PID_database", "custom_pids.txt")
     filename = input(f"\nEnter filename (default: {default_filename}): ").strip()
     if not filename:
         filename = default_filename

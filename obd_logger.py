@@ -13,6 +13,7 @@ import time
 from datetime import datetime
 from typing import List, Optional, Dict
 import os
+import serial.tools.list_ports
 
 
 class OBDLogger:
@@ -28,39 +29,76 @@ class OBDLogger:
         self.csv_writer: Optional[csv.DictWriter] = None
         self.csv_file_handle = None
         
-    def connect(self, port: Optional[str] = None, baudrate: Optional[int] = None) -> bool:
+    @staticmethod
+    def get_available_ports() -> List[Dict[str, str]]:
+        """
+        Get a list of available serial ports.
+        
+        Returns:
+            List of dictionaries containing port 'device' and 'description'.
+        """
+        ports = []
+        for p in serial.tools.list_ports.comports():
+            # Include standard bluetooth serial ports commonly used by ELM327
+            ports.append({
+                'device': p.device,
+                'description': p.description
+            })
+        return ports
+
+    def connect(self, port: Optional[str] = None, baudrate: Optional[int] = None, retries: int = 2) -> bool:
         """
         Connect to the ELM327 OBD-II adapter.
         
         Args:
             port: Serial port (e.g., 'COM3'). If None, auto-detect.
-            baudrate: Baud rate for connection. If None, use default.
+            baudrate: Baud rate for connection. If None, try common baudrates.
+            retries: Number of connection attempts to make.
             
         Returns:
             True if connection successful, False otherwise.
         """
         try:
             print(f"Attempting to connect to ELM327...")
-            if port:
-                print(f"Using specified port: {port}")
-                if baudrate:
-                    self.connection = obd.OBD(portstr=port, baudrate=baudrate)
-                else:
-                    self.connection = obd.OBD(portstr=port)
-            else:
-                print("Auto-detecting OBD-II adapter...")
-                self.connection = obd.OBD()
             
-            if self.connection.status() == obd.OBDStatus.CAR_CONNECTED:
-                print(f"✓ Successfully connected to vehicle via {self.connection.port_name()}")
-                return True
-            else:
-                print(f"✗ Connection failed. Status: {self.connection.status()}")
-                print("  Make sure:")
-                print("  1. ELM327 is paired via Bluetooth")
-                print("  2. Vehicle ignition is ON")
-                print("  3. Correct COM port is selected")
-                return False
+            # Common ELM327 baudrates to try if auto-baudrate fails
+            baudrates_to_try = [baudrate] if baudrate else [None, 38400, 115200, 9600]
+            
+            for attempt in range(1, retries + 1):
+                if attempt > 1:
+                    print(f"Retry attempt {attempt}/{retries}...")
+                    time.sleep(1)
+                    
+                for baud in baudrates_to_try:
+                    baud_str = f" at {baud} baud" if baud else " with auto-baudrate"
+                    
+                    if port:
+                        print(f"Trying port: {port}{baud_str}")
+                        if baud:
+                            self.connection = obd.OBD(portstr=port, baudrate=baud, fast=False)
+                        else:
+                            self.connection = obd.OBD(portstr=port, fast=False)
+                    else:
+                        print(f"Auto-detecting OBD-II adapter{baud_str}...")
+                        if baud:
+                            self.connection = obd.OBD(baudrate=baud, fast=False)
+                        else:
+                            self.connection = obd.OBD(fast=False)
+                    
+                    if self.connection.status() == obd.OBDStatus.CAR_CONNECTED:
+                        print(f"✓ Successfully connected to vehicle via {self.connection.port_name()}")
+                        return True
+                    else:
+                        if self.connection:
+                            self.connection.close()
+                            self.connection = None
+                            
+            print(f"✗ Connection failed after {retries} attempts.")
+            print("  Make sure:")
+            print("  1. ELM327 is paired via Bluetooth")
+            print("  2. Vehicle ignition is ON")
+            print("  3. Correct COM port is selected")
+            return False
                 
         except Exception as e:
             print(f"✗ Error connecting to OBD-II adapter: {e}")
