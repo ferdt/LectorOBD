@@ -54,8 +54,24 @@ Before running the application, you need to pair your ELM327 adapter via Windows
 
 ### Starting the Application
 
+Interactive mode (default):
 ```bash
 python main.py
+```
+
+Command-Line Auto-Logging mode:
+```bash
+python main.py [config_file.txt] [-c custom_pids.txt] [-r] [-i INTERVAL]
+```
+- `config_file.txt`: Path to a file containing a list of PIDs to log (e.g. `pids_example.txt`).
+- `-c` / `--custom-pids`: Path to a file defining custom manufacturer-specific PIDs. Defaults to `custom_pids.txt` if it exists.
+- `-r` / `--run`: Automatically connect to the ELM327 and start logging without opening the menu.
+- `-i` / `--interval`: Logging interval in seconds (default: 1.0).
+
+**Example:**
+```bash
+# Auto-connect, load custom definitions, load PIDs to log, and start logging every 0.5 seconds
+python main.py pids_to_log.txt -c my_custom_pids.txt -r -i 0.5
 ```
 
 ### Basic Workflow

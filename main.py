@@ -7,6 +7,7 @@ A Python application to log PID data from OBD-II port via ELM327 Bluetooth adapt
 import sys
 import time
 import os
+import argparse
 from obd_logger import OBDLogger
 import obd
 
@@ -405,7 +406,65 @@ def show_status(logger: OBDLogger):
 
 def main():
     """Main application entry point."""
+    parser = argparse.ArgumentParser(description="OBD-II Data Logger")
+    parser.add_argument('config', nargs='?', help='Configuration file with list of PIDs to log (e.g., pids_example.txt)')
+    parser.add_argument('-c', '--custom-pids', help='File defining custom PIDs (default: auto-detects custom_pids.txt)', default=None)
+    parser.add_argument('-r', '--run', action='store_true', help='Auto-connect and start logging immediately')
+    parser.add_argument('-i', '--interval', type=float, default=1.0, help='Logging interval in seconds (default: 1.0)')
+    args = parser.parse_args()
+
     logger = OBDLogger()
+
+    # Pre-load custom PIDs
+    custom_file = args.custom_pids if args.custom_pids else "custom_pids.txt"
+    if os.path.exists(custom_file):
+        logger.load_custom_pids_from_file(custom_file)
+    elif args.custom_pids:
+        print(f"⚠ Warning: Specified custom PIDs file '{args.custom_pids}' not found.")
+
+    if args.config:
+        print(f"\nLoading configuration from {args.config}...")
+        logger.load_pids_from_file(args.config)
+        time.sleep(1)
+
+    if args.run:
+        print("\nAuto-connecting to ELM327...")
+        if not logger.connect():
+            print("Failed to auto-connect. Exiting.")
+            sys.exit(1)
+        
+        if not logger.start_logging(args.interval):
+            print("Failed to start logging. Exiting.")
+            logger.disconnect()
+            sys.exit(1)
+            
+        print("\n" + "=" * 60)
+        print("LOGGING IN PROGRESS - Press Ctrl+C to stop")
+        print("=" * 60)
+        
+        try:
+            while logger.is_logging:
+                data = logger.log_data_point()
+                if data:
+                    print(f"\n[{data['Timestamp']}]")
+                    for key, value in data.items():
+                        if key != 'Timestamp':
+                            print(f"  {key:20s}: {value}")
+                
+                time.sleep(args.interval)
+        except KeyboardInterrupt:
+            print("\n\nLogging interrupted by user")
+            logger.stop_logging()
+            logger.disconnect()
+            sys.exit(0)
+        except Exception as e:
+            print(f"\n✗ Logging error: {e}")
+            logger.stop_logging()
+            logger.disconnect()
+            sys.exit(1)
+        
+        logger.disconnect()
+        sys.exit(0)
     
     try:
         while True:
