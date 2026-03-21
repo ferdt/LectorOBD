@@ -15,7 +15,7 @@ echo.
 ::
 :: Note: Press Ctrl+C while logging to stop and save the CSV file cleanly.
 
-python main.py pids_log.txt -c pid_database\PID_JTD.txt -p COM10 -r -i 1.0
+python main.py
 
 echo.
 pause

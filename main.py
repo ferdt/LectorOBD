@@ -411,6 +411,7 @@ def main():
     parser.add_argument('-c', '--custom-pids', help='File defining custom PIDs (default: auto-detects custom_pids.txt)', default=None)
     parser.add_argument('-r', '--run', action='store_true', help='Auto-connect and start logging immediately')
     parser.add_argument('-i', '--interval', type=float, default=1.0, help='Logging interval in seconds (default: 1.0)')
+    parser.add_argument('-p', '--port', type=str, default=None, help='Serial COM port for ELM327 (e.g., COM3, /dev/ttyUSB0)')
     args = parser.parse_args()
 
     logger = OBDLogger()
@@ -428,8 +429,9 @@ def main():
         time.sleep(1)
 
     if args.run:
-        print("\nAuto-connecting to ELM327...")
-        if not logger.connect():
+        port_msg = f" on port {args.port}" if args.port else ""
+        print(f"\nAuto-connecting to ELM327{port_msg}...")
+        if not logger.connect(port=args.port):
             print("Failed to auto-connect. Exiting.")
             sys.exit(1)
         

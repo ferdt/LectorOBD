@@ -87,6 +87,11 @@ class OBDLogger:
                     
                     if self.connection.status() == obd.OBDStatus.CAR_CONNECTED:
                         print(f"✓ Successfully connected to vehicle via {self.connection.port_name()}")
+                        
+                        # Add any pre-loaded custom commands to the active connection
+                        for custom_cmd in self.custom_commands.values():
+                            self.connection.supported_commands.add(custom_cmd)
+                            
                         return True
                     else:
                         if self.connection:
@@ -155,13 +160,14 @@ class OBDLogger:
         
         return sorted(all_commands, key=lambda x: x.name)
     
-    def _create_custom_decoder(self, equation: str, num_bytes: int):
+    def _create_custom_decoder(self, equation: str, num_bytes: int, pid_code: str):
         """
         Create a decoder function from an equation string.
         
         Args:
             equation: Equation string (e.g., "(A*256+B)/10-273.15")
             num_bytes: Number of bytes expected in response
+            pid_code: The hexadecimal string of the request command
             
         Returns:
             Decoder function compatible with python-OBD
@@ -174,15 +180,17 @@ class OBDLogger:
             # Get the data bytes from the message
             data = messages[0].data
             
-            # Skip the first 2 bytes (mode and PID echo)
-            if len(data) < 2 + num_bytes:
+            # The response header mirrors the request bytes (mode + PID)
+            header_len = len(pid_code) // 2
+            
+            if len(data) < header_len + num_bytes:
                 return None
             
             # Extract byte values
-            if num_bytes >= 1:
-                A = data[2]
-            if num_bytes >= 2:
-                B = data[3] if len(data) > 3 else 0
+            A = data[header_len] if num_bytes >= 1 else 0
+            B = data[header_len + 1] if num_bytes >= 2 and len(data) > header_len + 1 else 0
+            C = data[header_len + 2] if num_bytes >= 3 and len(data) > header_len + 2 else 0
+            D = data[header_len + 3] if num_bytes >= 4 and len(data) > header_len + 3 else 0
             
             try:
                 # Evaluate the equation
@@ -208,16 +216,19 @@ class OBDLogger:
             True if registration successful, False otherwise.
         """
         try:
-            # Determine number of bytes needed based on equation
-            num_bytes = 2 if 'B' in equation else 1
+            # Determine number of bytes needed based on equation variables A, B, C, D
+            num_bytes = 1
+            if 'D' in equation: num_bytes = 4
+            elif 'C' in equation: num_bytes = 3
+            elif 'B' in equation: num_bytes = 2
             
             # Create the custom command
             custom_cmd = OBDCommand(
                 name=name,
                 desc=description,
-                command=bytes.fromhex(pid_code),
+                command=pid_code.encode('ascii'), # Not fromhex! python-obd expects ASCII like b"221167"
                 _bytes=num_bytes,
-                decoder=self._create_custom_decoder(equation, num_bytes),
+                decoder=self._create_custom_decoder(equation, num_bytes, pid_code),
                 ecu=ECU.ALL,
                 fast=False
             )
@@ -319,12 +330,23 @@ class OBDLogger:
             failed_pids = []
             
             for pid_name in pid_names:
+                # Auto-correct common typo in standard python-obd library
+                if pid_name == "AMBIENT_AIR_TEMP":
+                    pid_name_search = "AMBIANT_AIR_TEMP"
+                else:
+                    pid_name_search = pid_name
+                    
                 # Try to find the command
                 try:
-                    cmd = obd.commands[pid_name]
+                    cmd = obd.commands[pid_name_search]
                     self.selected_pids.append(cmd)
                 except KeyError:
-                    failed_pids.append(pid_name)
+                    # Try custom commands
+                    cmd = self.custom_commands.get(pid_name)
+                    if cmd:
+                        self.selected_pids.append(cmd)
+                    else:
+                        failed_pids.append(pid_name)
             
             if self.selected_pids:
                 print(f"✓ Loaded {len(self.selected_pids)} PIDs from {filename}")
