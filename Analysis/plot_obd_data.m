@@ -52,7 +52,7 @@ else
 end
 
 % Ensure columns exist, padding with NaN if they weren't logged
-requiredVars = {'SPEED', 'RPM', 'ENGINE_LOAD'};
+requiredVars = {'SPEED', 'RPM', 'ENGINE_LOAD', 'COMMANDED_EGR', 'INTAKE_PRESSURE', 'MAF'};
 for i = 1:length(requiredVars)
     var = requiredVars{i};
     if ~ismember(var, data.Properties.VariableNames)
@@ -68,7 +68,7 @@ end
 
 
 %% Figure 1: Timeseries of Speed, RPM, Engine Load
-figure('Name', 'Timeseries Overview', 'Position', [100, 100, 800, 900]);
+figure('Name', 'Timeseries Overview', 'Units', 'normalized', 'Position', [0.02, 0.4, 0.45, 0.52]);
 
 % Axes for Speed
 ax1 = subplot(3,1,1);
@@ -97,7 +97,7 @@ linkaxes([ax1, ax2, ax3], 'x');
 
 
 %% Figure 2: Speed vs RPM
-figure('Name', 'Speed vs RPM', 'Position', [950, 100, 600, 500]);
+figure('Name', 'Speed vs RPM', 'Units', 'normalized', 'Position', [0.5, 0.05, 0.22, 0.4]);
 scatter(data.RPM, data.SPEED, 15, 'filled', 'MarkerFaceAlpha', 0.5);
 title('Speed vs Engine RPM');
 xlabel('Engine RPM');
@@ -162,7 +162,7 @@ end
 
 
 %% Figure 3: 2D Histogram of Engine Load vs RPM
-figure('Name', 'Engine Load vs RPM (2D Hist)', 'Position', [950, 650, 600, 500]);
+figure('Name', 'Engine Load vs RPM (2D Hist)', 'Units', 'normalized', 'Position', [0.74, 0.05, 0.24, 0.4]);
 
 % Remove NaN rows for histogram
 validIdx = ~isnan(data.RPM) & ~isnan(data.ENGINE_LOAD);
@@ -189,6 +189,98 @@ if any(validIdx)
     end
 else
     text(0.5, 0.5, 'Insufficient data to plot 2D Histogram (Missing RPM or ENGINE_LOAD)', ...
+        'HorizontalAlignment', 'center', 'FontSize', 12, 'Units', 'normalized');
+end
+
+%% Figure 4: Timeseries of Emissions Control
+figure('Name', 'Emissions Control (Timeseries)', 'Units', 'normalized', 'Position', [0.02, 0.05, 0.45, 0.25]);
+plot(data.Timestamp, data.COMMANDED_EGR, 'g-', 'LineWidth', 1.5);
+title('Commanded EGR');
+ylabel('EGR (%)');
+xlabel('Time');
+grid on;
+
+%% Figure 5: Intake Pressure vs RPM
+figure('Name', 'Intake Pressure vs RPM', 'Units', 'normalized', 'Position', [0.5, 0.52, 0.48, 0.4]);
+scatter(data.RPM, data.INTAKE_PRESSURE/100, 15, 'filled', 'MarkerFaceAlpha', 0.5);
+hold on;
+title('Intake Pressure vs Engine RPM');
+xlabel('Engine RPM');
+ylabel('Intake Pressure (bar)');
+grid on;
+
+% Calculate maximum envelope
+validPressIdx = ~isnan(data.RPM) & ~isnan(data.INTAKE_PRESSURE);
+if any(validPressIdx)
+    rpm_vals = data.RPM(validPressIdx);
+    press_vals = data.INTAKE_PRESSURE(validPressIdx);
+    
+    if max(rpm_vals) > min(rpm_vals)
+        bin_edges = linspace(min(rpm_vals), max(rpm_vals), 20); % 20 bins
+        bin_centers = (bin_edges(1:end-1) + bin_edges(2:end)) / 2;
+        max_press_env = NaN(size(bin_centers));
+        
+        for b = 1:length(bin_centers)
+            in_bin = rpm_vals >= bin_edges(b) & rpm_vals <= bin_edges(b+1);
+            if any(in_bin)
+                % Sort to discard top 2% if there are enough points (pseudo-percentile)
+                bin_press = sort(press_vals(in_bin));
+                if length(bin_press) > 10
+                    idx98 = max(1, round(0.98 * length(bin_press)));
+                    max_press_env(b) = bin_press(idx98);
+                else
+                    max_press_env(b) = max(bin_press);
+                end
+            end
+        end
+        
+        % Filter out NaNs for a continuous line
+        valid_env = ~isnan(max_press_env);
+        if sum(valid_env) > 1
+            plot(bin_centers(valid_env), max_press_env(valid_env)/100, 'r-', 'LineWidth', 2, 'DisplayName', 'Max Envelope');
+            legend('Data', 'Max Envelope', 'Location', 'best');
+        end
+    end
+end
+hold off;
+
+%% Figure 6: 3D Surface of MAF vs RPM and Engine Load
+figure('Name', 'MAF vs RPM and Engine Load', 'Units', 'normalized', 'Position', [0.2, 0.2, 0.6, 0.6]);
+
+validMafIdx = ~isnan(data.RPM) & ~isnan(data.ENGINE_LOAD) & ~isnan(data.MAF);
+if sum(validMafIdx) > 10
+    rpm_v = data.RPM(validMafIdx);
+    load_v = data.ENGINE_LOAD(validMafIdx);
+    maf_v = data.MAF(validMafIdx);
+    
+    % Define the grid range
+    rpm_grid = linspace(min(rpm_v), max(rpm_v), 30);
+    load_grid = linspace(min(load_v), max(load_v), 30);
+    [X, Y] = meshgrid(rpm_grid, load_grid);
+    
+    % Interpolate scattered data onto the grid
+    % 'linear' avoids wild extrapolations and naturally places NaNs where data is missing
+    Z = griddata(rpm_v, load_v, maf_v, X, Y, 'linear');
+    
+    % Plot surface
+    surf(X, Y, Z, 'EdgeColor', 'none', 'FaceAlpha', 0.8);
+    hold on;
+    
+    % Superimpose the original sparse scattered points
+    scatter3(rpm_v, load_v, maf_v, 10, 'k', 'filled', 'MarkerFaceAlpha', 0.3);
+    
+    title('Mass Air Flow (MAF) vs RPM and Engine Load');
+    xlabel('Engine RPM');
+    ylabel('Engine Load (%)');
+    zlabel('MAF (g/s)');
+    colorbar;
+    grid on;
+    
+    % Initial 3D view angle
+    view([-45, 30]);
+    hold off;
+else
+    text(0.5, 0.5, 'Insufficient data to plot MAF 3D Surface (Missing MAF, RPM or ENGINE_LOAD)', ...
         'HorizontalAlignment', 'center', 'FontSize', 12, 'Units', 'normalized');
 end
 
