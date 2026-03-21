@@ -19,8 +19,10 @@ import serial.tools.list_ports
 class OBDLogger:
     """Main OBD-II data logger class for ELM327 adapters."""
     
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         """Initialize the OBD logger."""
+        if debug:
+            obd.logger.setLevel(obd.logging.DEBUG)
         self.connection: Optional[obd.OBD] = None
         self.selected_pids: List[obd.OBDCommand] = []
         self.custom_commands: Dict[str, obd.OBDCommand] = {}  # Store custom PIDs
@@ -46,7 +48,7 @@ class OBDLogger:
             })
         return ports
 
-    def connect(self, port: Optional[str] = None, baudrate: Optional[int] = None, retries: int = 2) -> bool:
+    def connect(self, port: Optional[str] = None, baudrate: Optional[int] = None, retries: int = 2, extended_session: bool = False, protocol: Optional[str] = None) -> bool:
         """
         Connect to the ELM327 OBD-II adapter.
         
@@ -54,6 +56,8 @@ class OBDLogger:
             port: Serial port (e.g., 'COM3'). If None, auto-detect.
             baudrate: Baud rate for connection. If None, try common baudrates.
             retries: Number of connection attempts to make.
+            extended_session: If True, attempt to send '10 C0' / '10 03'.
+            protocol: Force specific OBD protocol (e.g. "6" for CAN 11/500).
             
         Returns:
             True if connection successful, False otherwise.
@@ -75,15 +79,15 @@ class OBDLogger:
                     if port:
                         print(f"Trying port: {port}{baud_str}")
                         if baud:
-                            self.connection = obd.OBD(portstr=port, baudrate=baud, fast=False)
+                            self.connection = obd.OBD(portstr=port, baudrate=baud, protocol=protocol, fast=False)
                         else:
-                            self.connection = obd.OBD(portstr=port, fast=False)
+                            self.connection = obd.OBD(portstr=port, protocol=protocol, fast=False)
                     else:
                         print(f"Auto-detecting OBD-II adapter{baud_str}...")
                         if baud:
-                            self.connection = obd.OBD(baudrate=baud, fast=False)
+                            self.connection = obd.OBD(baudrate=baud, protocol=protocol, fast=False)
                         else:
-                            self.connection = obd.OBD(fast=False)
+                            self.connection = obd.OBD(protocol=protocol, fast=False)
                     
                     if self.connection.status() == obd.OBDStatus.CAR_CONNECTED:
                         print(f"✓ Successfully connected to vehicle via {self.connection.port_name()}")
@@ -91,6 +95,15 @@ class OBDLogger:
                         # Add any pre-loaded custom commands to the active connection
                         for custom_cmd in self.custom_commands.values():
                             self.connection.supported_commands.add(custom_cmd)
+                            
+                        # If requested, attempt to unlock the ECU with Diagnostic Session commands
+                        if extended_session:
+                            print("  [INFO] Attempting to open Extended Diagnostic Session (10 C0 / 10 03)...")
+                            # KWP2000 uses 10 C0, UDS uses 10 03
+                            session_kwp = OBDCommand("SESSION_KWP", "", b"10C0", 0, lambda m: m, ecu=ECU.ALL, fast=False)
+                            session_uds = OBDCommand("SESSION_UDS", "", b"1003", 0, lambda m: m, ecu=ECU.ALL, fast=False)
+                            self.connection.query(session_kwp)
+                            self.connection.query(session_uds)
                             
                         return True
                     else:
@@ -186,6 +199,15 @@ class OBDLogger:
             if len(data) < header_len + num_bytes:
                 return None
             
+            # Check for negative response (7F) or invalid mode
+            # A positive response mode is Request Mode + 0x40
+            try:
+                req_mode = int(pid_code[:2], 16)
+                if data[0] != (req_mode + 0x40):
+                    return None
+            except ValueError:
+                return None
+            
             # Extract byte values
             A = data[header_len] if num_bytes >= 1 else 0
             B = data[header_len + 1] if num_bytes >= 2 and len(data) > header_len + 1 else 0
@@ -217,18 +239,22 @@ class OBDLogger:
         """
         try:
             # Determine number of bytes needed based on equation variables A, B, C, D
-            num_bytes = 1
-            if 'D' in equation: num_bytes = 4
-            elif 'C' in equation: num_bytes = 3
-            elif 'B' in equation: num_bytes = 2
+            data_bytes = 1
+            if 'D' in equation: data_bytes = 4
+            elif 'C' in equation: data_bytes = 3
+            elif 'B' in equation: data_bytes = 2
+            
+            # python-obd truncates the entire response (including header) based on _bytes
+            header_len = len(pid_code) // 2
+            total_bytes = header_len + data_bytes
             
             # Create the custom command
             custom_cmd = OBDCommand(
                 name=name,
                 desc=description,
                 command=pid_code.encode('ascii'), # Not fromhex! python-obd expects ASCII like b"221167"
-                _bytes=num_bytes,
-                decoder=self._create_custom_decoder(equation, num_bytes, pid_code),
+                _bytes=total_bytes,
+                decoder=self._create_custom_decoder(equation, data_bytes, pid_code),
                 ecu=ECU.ALL,
                 fast=False
             )

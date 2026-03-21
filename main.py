@@ -55,7 +55,11 @@ def connect_menu(logger: OBDLogger):
     
     if choice == '1':
         print("\nAttempting auto-detection...")
-        if logger.connect():
+        args_obj = getattr(sys.modules['__main__'], 'args', None)
+        ext_sesh = args_obj.extended_session if args_obj else False
+        force_proto = args_obj.protocol if args_obj else None
+        
+        if logger.connect(extended_session=ext_sesh, protocol=force_proto):
             print("\n✓ Connection successful!")
             input("Press Enter to continue...")
         else:
@@ -368,10 +372,16 @@ def start_logging_menu(logger: OBDLogger):
             
             if data:
                 # Display the logged data
-                print(f"\n[{data['Timestamp']}]")
-                for key, value in data.items():
-                    if key != 'Timestamp':
-                        print(f"  {key:20s}: {value}")
+                args_obj = getattr(sys.modules['__main__'], 'args', None)
+                verbose = args_obj.verbose if args_obj else False
+                
+                if verbose:
+                    print(f"\n[{data['Timestamp']}]")
+                    for key, value in data.items():
+                        if key != 'Timestamp':
+                            print(f"  {key:20s}: {value}")
+                else:
+                    print(f"[{data['Timestamp']}] Logged {len(data)-1} PIDs")
             
             time.sleep(interval)
     
@@ -412,9 +422,13 @@ def main():
     parser.add_argument('-r', '--run', action='store_true', help='Auto-connect and start logging immediately')
     parser.add_argument('-i', '--interval', type=float, default=1.0, help='Logging interval in seconds (default: 1.0)')
     parser.add_argument('-p', '--port', type=str, default=None, help='Serial COM port for ELM327 (e.g., COM3, /dev/ttyUSB0)')
+    parser.add_argument('-P', '--protocol', type=str, default=None, help='Force OBD protocol (e.g., "6" for ISO 15765-4 CAN 11/500)')
+    parser.add_argument('-e', '--extended-session', action='store_true', help='Attempt to start Extended Diagnostic Session (unlock Mode 21/22)')
+    parser.add_argument('-d', '--debug', action='store_true', help='Enable python-obd internal debug logging')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Print all PID values to screen during logging')
     args = parser.parse_args()
 
-    logger = OBDLogger()
+    logger = OBDLogger(debug=args.debug)
 
     # Pre-load custom PIDs
     custom_file = args.custom_pids if args.custom_pids else "custom_pids.txt"
@@ -430,8 +444,9 @@ def main():
 
     if args.run:
         port_msg = f" on port {args.port}" if args.port else ""
-        print(f"\nAuto-connecting to ELM327{port_msg}...")
-        if not logger.connect(port=args.port):
+        proto_msg = f" [Protocol force: {args.protocol}]" if args.protocol else ""
+        print(f"\nAuto-connecting to ELM327{port_msg}{proto_msg}...")
+        if not logger.connect(port=args.port, extended_session=args.extended_session, protocol=args.protocol):
             print("Failed to auto-connect. Exiting.")
             sys.exit(1)
         
@@ -448,10 +463,13 @@ def main():
             while logger.is_logging:
                 data = logger.log_data_point()
                 if data:
-                    print(f"\n[{data['Timestamp']}]")
-                    for key, value in data.items():
-                        if key != 'Timestamp':
-                            print(f"  {key:20s}: {value}")
+                    if args.verbose:
+                        print(f"\n[{data['Timestamp']}]")
+                        for key, value in data.items():
+                            if key != 'Timestamp':
+                                print(f"  {key:20s}: {value}")
+                    else:
+                        print(f"[{data['Timestamp']}] Logged {len(data)-1} PIDs")
                 
                 time.sleep(args.interval)
         except KeyboardInterrupt:

@@ -11,23 +11,23 @@
 # ============================================================================
 
 # Diesel Particulate Filter (DPF) PIDs
-DPF_TEMPERATURE|221167|(A*256+B)/10-273.15|DPF Temperature (°C)
-DPF_CLOGGING_LEVEL|221155|A|DPF Clogging Level (%)
-DPF_PRESSURE|221156|(A*256+B)/100|DPF Pressure (kPa)
+DPF_TEMPERATURE|211167|(A*256+B)/10-273.15|DPF Temperature (°C)
+DPF_CLOGGING_LEVEL|211155|A|DPF Clogging Level (%)
+DPF_PRESSURE|211156|(A*256+B)/100|DPF Pressure (kPa)
 
 # Engine Temperature PIDs
-OIL_TEMP|221310|A-40|Oil Temperature (°C)
+OIL_TEMP|211310|A-40|Oil Temperature (°C)
 
 # Engine Control PIDs
-EGR_POSITION|22115F|A/2.55|EGR Position (%)
-BOOST_PRESSURE|22115A|(A*256+B)/100|Boost Pressure (kPa)
-FUEL_PRESSURE|22115B|(A*256+B)/10|Fuel Pressure (kPa)
+EGR_POSITION|21115F|A/2.55|EGR Position (%)
+BOOST_PRESSURE|21115A|(A*256+B)/100|Boost Pressure (kPa)
+FUEL_PRESSURE|21115B|(A*256+B)/10|Fuel Pressure (kPa)
 
 # Status Indicators
 ENGINE_OIL_LIGHT|221151|A|Engine Oil Light Status
 
 # Fuel
-INJECTOR_1_TRIM|221201|(A*256+B)/1000|Injector 1 fuel trim mm³/i
-INJECTOR_2_TRIM|221202|(A*256+B)/1000|Injector 2 fuel trim mm³/i
-INJECTOR_3_TRIM|221203|(A*256+B)/1000|Injector 3 fuel trim mm³/i
-INJECTOR_4_TRIM|221204|(A*256+B)/1000|Injector 4 fuel trim mm³/i
+INJECTOR_1_TRIM|211201|(A*256+B)/1000|Injector 1 fuel trim mm³/i
+INJECTOR_2_TRIM|211202|(A*256+B)/1000|Injector 2 fuel trim mm³/i
+INJECTOR_3_TRIM|211203|(A*256+B)/1000|Injector 3 fuel trim mm³/i
+INJECTOR_4_TRIM|211204|(A*256+B)/1000|Injector 4 fuel trim mm³/i
